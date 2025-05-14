@@ -64,7 +64,10 @@ def zephyr_pa_files():
 
 
 @pytest.fixture(scope="module")
-def common_server_args() -> list[str]:
+def common_server_args(
+    zephyr_lora_files,
+    zephyr_lora_added_tokens_files,
+) -> list[str]:
     return [
         # use half precision for speed and memory savings in CI environment
         "--dtype",
@@ -74,14 +77,6 @@ def common_server_args() -> list[str]:
         "--max-num-seqs",
         "128",
         "--enforce-eager",
-    ]
-
-
-@pytest.fixture(scope="module")
-def default_server_args(zephyr_lora_files, zephyr_lora_added_tokens_files,
-                        zephyr_pa_files, common_server_args: list[str]):
-    return [
-        *common_server_args,
         # lora config
         "--enable-lora",
         "--lora-modules",
@@ -91,6 +86,14 @@ def default_server_args(zephyr_lora_files, zephyr_lora_added_tokens_files,
         "64",
         "--max-cpu-loras",
         "2",
+    ]
+
+
+@pytest.fixture(scope="module")
+def default_server_args(zephyr_pa_files,
+                        common_server_args: list[str]) -> list[str]:
+    return [
+        *common_server_args,
         # pa config
         "--enable-prompt-adapter",
         "--prompt-adapters",
@@ -119,8 +122,9 @@ def server_with_prompt_embeds(common_server_args, request):
         common_server_args.append(request.param)
 
     # We use the common server args instead of the default server args because
-    # prompt embeds are not compatible with Lora or Prompt Adapter requests
+    # prompt embeds are not compatible with Prompt Adapter requests
     common_server_args.append("--enable-prompt-embeds")
+    common_server_args.append("--no-enable-chunked-prefill")
 
     # Prompt embeds are currently only supported on v0
     with RemoteOpenAIServer(MODEL_NAME,
@@ -130,20 +134,23 @@ def server_with_prompt_embeds(common_server_args, request):
 
 
 @pytest_asyncio.fixture
-async def client(server):
+async def client(server: RemoteOpenAIServer):
     async with server.get_async_client() as async_client:
         yield async_client
 
 
 @pytest_asyncio.fixture
-async def client_with_prompt_embeds(server_with_prompt_embeds):
+async def client_with_prompt_embeds(
+        server_with_prompt_embeds: RemoteOpenAIServer):
     async with server_with_prompt_embeds.get_async_client() as async_client:
         yield async_client
 
 
 def create_dummy_embeds(num_tokens: int = 5) -> str:
     """Create dummy embeddings and return them as base64 encoded string."""
-    dummy_embeds = torch.randn(num_tokens, CONFIG.hidden_size)
+    dummy_embeds = torch.randn(num_tokens,
+                               CONFIG.hidden_size,
+                               dtype=torch.bfloat16)
     buffer = io.BytesIO()
     torch.save(dummy_embeds, buffer)
     return base64.b64encode(buffer.getvalue()).decode('utf-8')
@@ -824,7 +831,8 @@ async def test_guided_decoding_type_error(client: openai.AsyncOpenAI,
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model_name", [MODEL_NAME])
+@pytest.mark.parametrize("model_name",
+                         [MODEL_NAME, "zephyr-lora", "zephyr-lora2"])
 async def test_completions_with_prompt_embeds(
         client_with_prompt_embeds: openai.AsyncOpenAI, model_name: str):
     # Test case: Single prompt embeds input
@@ -917,7 +925,8 @@ async def test_completions_errors_with_prompt_embeds(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("logprobs_arg", [1, 0])
-@pytest.mark.parametrize("model_name", [MODEL_NAME])
+@pytest.mark.parametrize("model_name",
+                         [MODEL_NAME, "zephyr-lora", "zephyr-lora2"])
 async def test_completions_with_logprobs_and_prompt_embeds(
         client_with_prompt_embeds: openai.AsyncOpenAI, logprobs_arg: int,
         model_name: str):
