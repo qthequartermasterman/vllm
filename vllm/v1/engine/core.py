@@ -206,6 +206,7 @@ class EngineCore:
         self.scheduler.finish_requests(request_ids,
                                        RequestStatus.FINISHED_ABORTED)
 
+    # TODO: I think this function can stay as is...
     def execute_model(self, scheduler_output: SchedulerOutput):
         try:
             return self.model_executor.execute_model(scheduler_output)
@@ -216,6 +217,7 @@ class EngineCore:
             # Re-raise exception
             raise err
 
+    # TODO: There may need to be changes here, but if the model_exector is updated to use the updated SchedulerOutput, then it may not need to be changed here.
     def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
         """Schedule, execute, and make output.
 
@@ -235,6 +237,7 @@ class EngineCore:
         return (engine_core_outputs,
                 scheduler_output.total_num_scheduled_tokens > 0)
 
+    # TODO: There may need to be changes here, but if the model_exector is updated to use the updated SchedulerOutput, then it may not need to be changed here.
     def step_with_batch_queue(
             self) -> tuple[Optional[dict[int, EngineCoreOutputs]], bool]:
         """Schedule and execute batches with the batch queue.

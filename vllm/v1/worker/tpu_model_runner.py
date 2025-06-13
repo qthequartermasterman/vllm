@@ -808,6 +808,7 @@ class TPUModelRunner(LoRAModelRunnerMixin):
                 mm_embeds.append(encoder_output)
         return mm_embeds
 
+    # TODO: add inputs_embeds. Remember though that we need to create the embeddings for the newly generated tokens that will live input_ids, which we'll need to append to passed in input_ids using positions!
     def _get_model_inputs(self, input_ids: torch.Tensor,
                           mm_embeds: list[torch.Tensor]):
         if self.is_multimodal_model:
@@ -821,6 +822,7 @@ class TPUModelRunner(LoRAModelRunnerMixin):
                 inputs_embeds = self.model.get_input_embeddings(input_ids)
             return None, inputs_embeds
         else:
+            # TODO: Verify that woosuk's warning doesn't apply if we double compile (one with embeddings, one without) https://github.com/vllm-project/vllm/pull/11032/files
             # For text-only models, we use token ids as input.
             # While it is possible to use embeddings as input just like the
             # multimodal models, it is not desirable for performance since
@@ -849,6 +851,7 @@ class TPUModelRunner(LoRAModelRunnerMixin):
         # Prepare inputs
         attn_metadata, logits_indices, padded_num_reqs = self._prepare_inputs(
             scheduler_output)
+        # TODO: Prompt embeds will need to be injected here for TPU runners--probably passing in any input embeds is fine to this function
         input_ids, inputs_embeds = self._get_model_inputs(
             self.input_ids, mm_embeds)
         xm.mark_step()
@@ -1017,9 +1020,10 @@ class TPUModelRunner(LoRAModelRunnerMixin):
             self.model = model
         self.sampler = TPUSampler()
 
+    # TODO: add inputs_embeds boolean parameter
     @torch.no_grad()
     def _dummy_run(self, num_tokens: int) -> None:
-        if self.is_multimodal_model:
+        if self.is_multimodal_model:  # TODO: or if inputs_embeds bool parameter is True
             input_ids = None
             inputs_embeds = torch.zeros((num_tokens, self.hidden_size),
                                         dtype=self.dtype,
@@ -1053,7 +1057,8 @@ class TPUModelRunner(LoRAModelRunnerMixin):
             num_seqs=num_seqs,
         )
 
-        if self.is_multimodal_model:
+        # TODO: I think this is how TPU runner gets around having to avoid randomizing the inputs for MoE models (like in the GPU runner)
+        if self.is_multimodal_model:  # TODO: or if inputs_embeds bool parameter is True
             torch._dynamo.mark_dynamic(inputs_embeds, 0)
         else:
             torch._dynamo.mark_dynamic(input_ids, 0)

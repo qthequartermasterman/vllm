@@ -1331,11 +1331,12 @@ class EngineArgs:
                                recommend_to_remove=False)
             return False
 
+        # TODO: Remove this fallback switch, because the point of this PR is to enable v1 support!
         # No text embedding inputs so far.
-        if self.enable_prompt_embeds:
-            _raise_or_fallback(feature_name="--enable-prompt-embeds",
-                               recommend_to_remove=False)
-            return False
+        # if self.enable_prompt_embeds:
+        #     _raise_or_fallback(feature_name="--enable-prompt-embeds",
+        #                        recommend_to_remove=False)
+        #     return False
 
         # Only Fp16 and Bf16 dtypes since we only support FA.
         V1_SUPPORTED_DTYPES = [torch.bfloat16, torch.float16]

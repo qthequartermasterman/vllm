@@ -19,7 +19,7 @@ from vllm.v1.worker.block_table import MultiGroupBlockTable
 
 _SAMPLING_EPS = 1e-5
 
-
+# TODO: Probably will have to add output_embeds and prompt_embeds here
 @dataclass
 class CachedRequestState:
 
@@ -251,6 +251,7 @@ class InputBatch:
 
         self.req_id_to_index[req_id] = req_index
 
+        # TODO: Probably will need some updating here for prompt and output embeds
         # Copy the prompt token ids and output token ids.
         num_prompt_tokens = len(request.prompt_token_ids)
         self.num_prompt_tokens[req_index] = num_prompt_tokens

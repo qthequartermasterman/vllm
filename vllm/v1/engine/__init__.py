@@ -38,7 +38,7 @@ class FinishReason(enum.IntEnum):
     def __str__(self):
         return FINISH_REASON_STRINGS[self.value]
 
-
+# TODO: Update here
 class EngineCoreRequest(
         msgspec.Struct,
         array_like=True,  # type: ignore[call-arg]
@@ -91,7 +91,7 @@ class EngineCoreEvent(msgspec.Struct):
         timestamp = time.monotonic() if timestamp is None else timestamp
         return cls(event_type, timestamp)
 
-
+#TODO: Update
 class EngineCoreOutput(
         msgspec.Struct,
         array_like=True,  # type: ignore[call-arg]
