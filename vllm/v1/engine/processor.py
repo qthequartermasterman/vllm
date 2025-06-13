@@ -363,6 +363,7 @@ class Processor:
         model_config = self.model_config
         tokenizer = self.tokenizer.get_lora_tokenizer(lora_request)
 
+        # TODO: This is going to be very similar to https://github.com/vllm-project/vllm/pull/17732
         prompt_ids = prompt_inputs.get("prompt_token_ids", [])
         if not prompt_ids:
             if prompt_type == "encoder" and model_config.is_multimodal_model:
