@@ -82,6 +82,7 @@ class CPUWorker(Worker):
         set_random_seed(self.model_config.seed)
         self.model_runner.warming_up_model()
 
+    # TODO: I think this can stay as is...
     @torch.inference_mode()
     def execute_model(
         self,

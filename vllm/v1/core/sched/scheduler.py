@@ -155,6 +155,7 @@ class Scheduler(SchedulerInterface):
             enable_kv_cache_events=self.enable_kv_cache_events,
         )
 
+    # TODO: Update grouping prompt_embeds and prompt_ids. This is going to be substantially different than the equivalent changes in `vllm/core/scheduler.py` in the v0 PR, because there is no notion of prefills vs decode phases. I think much can be reused; how much I'm not sure.
     def schedule(self) -> SchedulerOutput:
         # NOTE(woosuk) on the scheduling algorithm:
         # There's no "decoding phase" nor "prefill phase" in the scheduler.
@@ -697,6 +698,7 @@ class Scheduler(SchedulerInterface):
             encoder_inputs_to_schedule.append(i)
         return encoder_inputs_to_schedule, num_new_tokens, encoder_budget
 
+    # TODO: Maybe update here?
     def update_from_output(
         self,
         scheduler_output: SchedulerOutput,

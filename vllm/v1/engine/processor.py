@@ -271,6 +271,7 @@ class Processor:
             sampling_params.max_tokens = (
                 self.model_config.max_model_len -
                 len(decoder_inputs["prompt_token_ids"]))
+        # TODO: Update length here to also allow prompt_embeds
         sampling_params.update_from_generation_config(
             self.generation_config_fields, eos_token_id)
         sampling_params.update_from_tokenizer(
@@ -362,10 +363,12 @@ class Processor:
         model_config = self.model_config
         tokenizer = self.tokenizer.get_lora_tokenizer(lora_request)
 
-        prompt_ids = prompt_inputs["prompt_token_ids"]
+        prompt_ids = prompt_inputs.get("prompt_token_ids", [])
         if not prompt_ids:
             if prompt_type == "encoder" and model_config.is_multimodal_model:
                 pass  # Mllama may have empty encoder inputs for text-only data
+            elif prompt_inputs["type"] == "embeds":
+                pass
             else:
                 raise ValueError(f"The {prompt_type} prompt cannot be empty")
 
