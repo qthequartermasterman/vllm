@@ -4,6 +4,7 @@
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
+import torch
 from typing import Any, Optional, Union
 
 from vllm.outputs import CompletionOutput, RequestOutput
@@ -69,7 +70,7 @@ class OutputProcessorOutput:
     request_outputs: list[RequestOutput]
     reqs_to_abort: list[str]
 
-
+# TODO: Consider using placeholder prompt token ids instead passing embeddings?
 class RequestState:
 
     def __init__(
@@ -80,7 +81,8 @@ class RequestState:
         lora_name: Optional[str],
         output_kind: RequestOutputKind,
         prompt: Optional[str],
-        prompt_token_ids: list[int],
+        prompt_token_ids: Optional[list[int]],
+        prompt_embeds: Optional[torch.Tensor],
         logprobs_processor: LogprobsProcessor,
         detokenizer: IncrementalDetokenizer,
         max_tokens_param: Optional[int],
@@ -95,7 +97,8 @@ class RequestState:
         self.output_kind = output_kind
         self.prompt = prompt
         self.prompt_token_ids = prompt_token_ids
-        self.prompt_len = len(prompt_token_ids)
+        self.prompt_embeds=prompt_embeds
+        self.prompt_len = len(prompt_token_ids or prompt_embeds)
         self.logprobs_processor = logprobs_processor
         self.detokenizer = detokenizer
         self.max_tokens_param = max_tokens_param
@@ -127,6 +130,7 @@ class RequestState:
             output_kind=request.sampling_params.output_kind,
             prompt=prompt,
             prompt_token_ids=request.prompt_token_ids,
+            prompt_embeds=request.prompt_embeds,
             logprobs_processor=LogprobsProcessor.from_new_request(
                 tokenizer=tokenizer,
                 request=request,

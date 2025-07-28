@@ -163,7 +163,7 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
         self.tokenizer: Tokenizer = tokenizer._tokenizer
 
         # Find a safe place to start.
-        prompt_suffix = request.prompt_token_ids
+        prompt_suffix = request.prompt_token_ids or []
         prompt_len = len(prompt_suffix)
         if prompt_len > 4:
             for i in range(4, min(prompt_len + 1, 24)):

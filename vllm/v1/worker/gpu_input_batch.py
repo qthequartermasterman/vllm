@@ -25,6 +25,7 @@ class CachedRequestState:
 
     req_id: str
     prompt_token_ids: list[int]
+    prompt_embeds: Optional[torch.Tensor]
     mm_inputs: list[MultiModalKwargs]
     mm_positions: list[PlaceholderRange]
     sampling_params: SamplingParams
@@ -48,6 +49,7 @@ class CachedRequestState:
 
     def get_token_id(self, idx: int) -> int:
         if idx < self.num_prompt_tokens:
+            # TODO: Handle this if there are prompt embeds (may not be needed if prompt_token_ids has to be filled with placeholders)
             return self.prompt_token_ids[idx]
         else:
             return self.output_token_ids[idx - self.num_prompt_tokens]

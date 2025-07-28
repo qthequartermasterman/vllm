@@ -391,7 +391,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
 
             self.requests[req_id] = CachedRequestState(
                 req_id=req_id,
-                prompt_token_ids=new_req_data.prompt_token_ids,
+                prompt_token_ids=new_req_data.prompt_token_ids or [0]*len(new_req_data.prompt_embeds),
+                prompt_embeds=new_req_data.prompt_embeds,
                 mm_inputs=new_req_data.mm_inputs,
                 mm_positions=new_req_data.mm_positions,
                 sampling_params=sampling_params,
@@ -1004,6 +1005,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 is_embed=pos_info.is_embed,
             )
 
+    # TODO: Adapt for prompt embeds
     def _gather_mm_embeddings(
         self,
         scheduler_output: "SchedulerOutput",
@@ -1194,6 +1196,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 and num_scheduled_tokens <= self.cudagraph_batch_sizes[-1]):
             # Use piecewise CUDA graphs.
             # Add padding to the batch size.
+            # TODO: I don't think we need to do anything different here?
             num_input_tokens = self.vllm_config.pad_for_cudagraph(
                 num_scheduled_tokens)
         else:
@@ -1233,6 +1236,13 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 inputs_embeds = self.model.get_input_embeddings(input_ids)
             # TODO(woosuk): Avoid the copy. Optimize.
             self.inputs_embeds[:num_scheduled_tokens].copy_(inputs_embeds)
+            inputs_embeds = self.inputs_embeds[:num_input_tokens]
+            input_ids = None
+        elif self.model_config.enable_prompt_embeds:
+            # For multimodal models, we use embeddings as input.
+            # This is because the multimodal model's embedding layer is
+            # not included in the CUDA graph, so we need to pass the
+            # embeddings directly.
             inputs_embeds = self.inputs_embeds[:num_input_tokens]
             input_ids = None
         else:
@@ -1391,6 +1401,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         # Mask out the sampled tokens that should not be sampled.
         for i in discard_sampled_tokens_req_indices:
             valid_sampled_token_ids[i].clear()
+        # TODO: put the valid_sampled_token_ids into the input_embeds for the correct request
 
         if not self.speculative_config:
             # Speculative decoding is not enabled.
@@ -1505,6 +1516,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         # Clear KVConnector state after all KVs are generated.
         if has_kv_transfer_group():
             get_kv_transfer_group().clear_connector_metadata()
+
+
 
         return ModelRunnerOutput(
             req_ids=self.input_batch.req_ids,
