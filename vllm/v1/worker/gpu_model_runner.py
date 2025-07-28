@@ -377,6 +377,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             assert req_index is not None
             removed_req_indices.append(req_index)
 
+        # TODO: My hunch is there will be neglible if any changes for new requests
         req_ids_to_add: list[str] = []
         # Add new requests to the cached states.
         for new_req_data in scheduler_output.scheduled_new_reqs:
@@ -390,7 +391,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
 
             self.requests[req_id] = CachedRequestState(
                 req_id=req_id,
-                prompt_token_ids=new_req_data.prompt_token_ids,
+                prompt_token_ids=new_req_data.prompt_token_ids or [0]*len(new_req_data.prompt_embeds),
+                prompt_embeds=new_req_data.prompt_embeds,
                 mm_inputs=new_req_data.mm_inputs,
                 mm_positions=new_req_data.mm_positions,
                 sampling_params=sampling_params,
@@ -636,6 +638,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self.input_batch.num_computed_tokens_cpu[:num_reqs] +
             num_scheduled_tokens)
 
+        # TODO: Not sure if we'll need to do something with the logic here to make sure we update the inputs_embeds for the new tokens, since we can't pass in a mix of tokens and embeds
         # Copy the tensors to the GPU.
         self.input_ids[:total_num_scheduled_tokens].copy_(
             self.input_ids_cpu[:total_num_scheduled_tokens], non_blocking=True)
@@ -695,6 +698,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             for layer_name in kv_cache_group_spec.layer_names:
                 attn_metadata[layer_name] = attn_metadata_i
 
+        # TODO: Speculative decoding + Prompt embeds doesn't make sense because the spec_decode model in general has a different embedding space
+        # TODO: Might have to disable spec decoding while instantiating the engine if both are enabled
         use_spec_decode = len(
             scheduler_output.scheduled_spec_decode_tokens) > 0
         if not use_spec_decode:
@@ -1000,6 +1005,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 is_embed=pos_info.is_embed,
             )
 
+    # TODO: Adapt for prompt embeds
     def _gather_mm_embeddings(
         self,
         scheduler_output: "SchedulerOutput",
@@ -1190,6 +1196,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 and num_scheduled_tokens <= self.cudagraph_batch_sizes[-1]):
             # Use piecewise CUDA graphs.
             # Add padding to the batch size.
+            # TODO: I don't think we need to do anything different here?
             num_input_tokens = self.vllm_config.pad_for_cudagraph(
                 num_scheduled_tokens)
         else:
@@ -1231,7 +1238,20 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self.inputs_embeds[:num_scheduled_tokens].copy_(inputs_embeds)
             inputs_embeds = self.inputs_embeds[:num_input_tokens]
             input_ids = None
+        elif self.model_config.enable_prompt_embeds:
+            # For multimodal models, we use embeddings as input.
+            # This is because the multimodal model's embedding layer is
+            # not included in the CUDA graph, so we need to pass the
+            # embeddings directly.
+            inputs_embeds = self.inputs_embeds[:num_input_tokens]
+            input_ids = None
         else:
+            # TODO: pull the inputs_embeds from the scheduler_output
+            # TODO: Since I think we're going to end up just passing token ids back from the scheduler, we will need to get the cached input_embeds from `self.input_embeds`, but get the new embeddings for the new tokens from `self.input_ids`
+            # TODO: Figure out the correct way of putting the now-calculated new token prompt embeddings into the cached `self.input_embeds`, probably? Like above for multimodal
+            # Because the entire batch is flattened (shape is ((batch_size*seq_len), hiddensize)), we can either pass all the input_ids in, like above, or selectively pass in the new ones and use self.positions in some way to do a masked copy in some way. Not sure of details yet
+            # TODO: Figure out what the performance hit in woosuk's warning is: https://github.com/vllm-project/vllm/pull/11032
+            # TODO: I **think** this can be neglible if we double-compile at start-up like we do in the v0 engine
             # For text-only models, we use token ids as input.
             # While it is possible to use embeddings as input just like the
             # multimodal models, it is not desirable for performance since
@@ -1381,6 +1401,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         # Mask out the sampled tokens that should not be sampled.
         for i in discard_sampled_tokens_req_indices:
             valid_sampled_token_ids[i].clear()
+        # TODO: put the valid_sampled_token_ids into the input_embeds for the correct request
 
         if not self.speculative_config:
             # Speculative decoding is not enabled.
@@ -1495,6 +1516,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         # Clear KVConnector state after all KVs are generated.
         if has_kv_transfer_group():
             get_kv_transfer_group().clear_connector_metadata()
+
+
 
         return ModelRunnerOutput(
             req_ids=self.input_batch.req_ids,
@@ -1730,6 +1753,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
 
         return prompt_logprobs_dict
 
+    # TODO: We may need to add inputs_embeds support here to get the same benefits in mixture-of-experts models
     @contextmanager
     def maybe_randomize_inputs(self, input_ids: torch.Tensor):
         """
@@ -1759,6 +1783,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             yield
             input_ids.fill_(0)
 
+    # TODO: allow input_embeds as a boolean parameter
     @torch.inference_mode()
     def _dummy_run(
         self,
@@ -1815,7 +1840,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         with self.maybe_dummy_run_with_lora(self.lora_config,
                                             num_scheduled_tokens):
             model = self.model
-            if self.is_multimodal_model:
+            if self.is_multimodal_model:  # TODO: or if the new inputs_embeds bool parameter is True. Since this isn't full generation, just a single forward pass (please check) I don't think we need to worry about caching any embeds
                 input_ids = None
                 inputs_embeds = self.inputs_embeds[:num_tokens]
             else:
@@ -2034,6 +2059,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         # can reuse the memory pool allocated for the large shapes.
         with graph_capture(device=self.device):
             skip_attn = not self.vllm_config.compilation_config.full_cuda_graph
+            # TODO: Don't iterate over just num_tokens but the cartesian product of num_tokens and input_embeds
             for num_tokens in reversed(self.cudagraph_batch_sizes):
                 for _ in range(self.vllm_config.compilation_config.
                                cudagraph_num_of_warmups):

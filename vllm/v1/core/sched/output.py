@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     import numpy as np
     import numpy.typing as npt
 
+    import torch
+
     from vllm.distributed.kv_transfer.kv_connector.v1.base import (
         KVConnectorMetadata)
     from vllm.lora.request import LoRARequest
@@ -18,11 +20,13 @@ if TYPE_CHECKING:
     from vllm.v1.request import Request
 
 
+# TODO: I think this will also need to be updated to include prompt_embeds
 @dataclass
 class NewRequestData:
 
     req_id: str
-    prompt_token_ids: list[int]
+    prompt_token_ids: Optional[list[int]]
+    prompt_embeds: Optional[torch.Tensor]
     mm_inputs: list[MultiModalKwargs]
     mm_hashes: list[str]
     mm_positions: list[PlaceholderRange]
@@ -40,6 +44,7 @@ class NewRequestData:
         return cls(
             req_id=request.request_id,
             prompt_token_ids=request.prompt_token_ids,
+            prompt_embeds=request.prompt_embeds,
             mm_inputs=request.mm_inputs,
             mm_hashes=request.mm_hashes,
             mm_positions=request.mm_positions,
@@ -49,10 +54,12 @@ class NewRequestData:
             lora_request=request.lora_request,
         )
 
+    # TODO: Add prompt_embeds shape
     def __repr__(self):
         return (f"NewRequestData("
                 f"req_id={self.req_id},"
                 f"prompt_token_ids={self.prompt_token_ids},"
+                f"prompt_embeds={self.prompt_embeds.shape if self.prompt_embeds is not None else None},"
                 f"mm_inputs={self.mm_inputs},"
                 f"mm_hashes={self.mm_hashes},"
                 f"mm_positions={self.mm_positions},"
@@ -62,11 +69,13 @@ class NewRequestData:
                 f"lora_request={self.lora_request}"
                 ")")
 
+    # TODO: Add prompt_embeds shape
     # Version of __repr__ with the prompt data obfuscated
     def anon_repr(self):
         return (f"NewRequestData("
                 f"req_id={self.req_id},"
-                f"prompt_token_ids_len={len(self.prompt_token_ids)},"
+                f"prompt_token_ids_len={len(self.prompt_token_ids or [])},"
+                f"prompt_embeds={self.prompt_embeds.shape if self.prompt_embeds is not None else None},"
                 f"mm_inputs={self.mm_inputs},"
                 f"mm_hashes={self.mm_hashes},"
                 f"mm_positions={self.mm_positions},"
@@ -77,6 +86,7 @@ class NewRequestData:
                 ")")
 
 
+# TODO: The v1 engine does scheduling comm differently than v0. It only streams diffs between processes (since the first few tokens are already kv-cached, there's no reason to send them again). IMO, if we can get away with just sending this diff, that would also be ideal.
 @dataclass
 class CachedRequestData:
 

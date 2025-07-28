@@ -5,6 +5,7 @@ import enum
 import time
 from collections.abc import Sequence
 from typing import Any, Optional, Union
+import torch
 
 import msgspec
 
@@ -38,7 +39,7 @@ class FinishReason(enum.IntEnum):
     def __str__(self):
         return FINISH_REASON_STRINGS[self.value]
 
-
+# TODO: Update here
 class EngineCoreRequest(
         msgspec.Struct,
         array_like=True,  # type: ignore[call-arg]
@@ -46,7 +47,8 @@ class EngineCoreRequest(
         gc=False):  # type: ignore[call-arg]
 
     request_id: str
-    prompt_token_ids: list[int]
+    prompt_token_ids: list[int] | None
+    prompt_embeds: Optional[torch.Tensor]
     mm_inputs: Optional[Sequence[Optional[MultiModalKwargs]]]
     mm_hashes: Optional[list[str]]
     mm_placeholders: Optional[list[PlaceholderRange]]
@@ -91,7 +93,7 @@ class EngineCoreEvent(msgspec.Struct):
         timestamp = time.monotonic() if timestamp is None else timestamp
         return cls(event_type, timestamp)
 
-
+#TODO: Update
 class EngineCoreOutput(
         msgspec.Struct,
         array_like=True,  # type: ignore[call-arg]

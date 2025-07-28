@@ -19,12 +19,13 @@ from vllm.v1.worker.block_table import MultiGroupBlockTable
 
 _SAMPLING_EPS = 1e-5
 
-
+# TODO: Probably will have to add output_embeds and prompt_embeds here
 @dataclass
 class CachedRequestState:
 
     req_id: str
     prompt_token_ids: list[int]
+    prompt_embeds: Optional[torch.Tensor]
     mm_inputs: list[MultiModalKwargs]
     mm_positions: list[PlaceholderRange]
     sampling_params: SamplingParams
@@ -48,6 +49,7 @@ class CachedRequestState:
 
     def get_token_id(self, idx: int) -> int:
         if idx < self.num_prompt_tokens:
+            # TODO: Handle this if there are prompt embeds (may not be needed if prompt_token_ids has to be filled with placeholders)
             return self.prompt_token_ids[idx]
         else:
             return self.output_token_ids[idx - self.num_prompt_tokens]
@@ -251,6 +253,7 @@ class InputBatch:
 
         self.req_id_to_index[req_id] = req_index
 
+        # TODO: Probably will need some updating here for prompt and output embeds
         # Copy the prompt token ids and output token ids.
         num_prompt_tokens = len(request.prompt_token_ids)
         self.num_prompt_tokens[req_index] = num_prompt_tokens

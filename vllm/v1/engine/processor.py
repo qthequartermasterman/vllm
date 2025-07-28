@@ -268,9 +268,12 @@ class Processor:
         sampling_params = params.clone()
         # If unset max tokens, then generate up to the max_model_len.
         if sampling_params.max_tokens is None:
+            prompt_ids_or_embeds = decoder_inputs.get("prompt_token_ids", decoder_inputs.get("prompt_embeds"))
             sampling_params.max_tokens = (
                 self.model_config.max_model_len -
-                len(decoder_inputs["prompt_token_ids"]))
+                len(prompt_ids_or_embeds))
+        # TODO: Update length here to also allow prompt_embeds
+        # TODO: Test to make sure that prompt embeds length are respected if max_tokens is None
         sampling_params.update_from_generation_config(
             self.generation_config_fields, eos_token_id)
         sampling_params.update_from_tokenizer(
@@ -326,7 +329,8 @@ class Processor:
 
         return decoder_inputs.get("prompt"), EngineCoreRequest(
             request_id=request_id,
-            prompt_token_ids=decoder_inputs["prompt_token_ids"],
+            prompt_token_ids=decoder_inputs.get("prompt_token_ids"),
+            prompt_embeds=decoder_inputs.get("prompt_embeds"),
             mm_inputs=sorted_mm_inputs,
             mm_hashes=sorted_mm_hashes,
             mm_placeholders=sorted_mm_positions,
@@ -362,10 +366,13 @@ class Processor:
         model_config = self.model_config
         tokenizer = self.tokenizer.get_lora_tokenizer(lora_request)
 
-        prompt_ids = prompt_inputs["prompt_token_ids"]
+        # TODO: This is going to be very similar to https://github.com/vllm-project/vllm/pull/17732
+        prompt_ids = prompt_inputs.get("prompt_token_ids", [])
         if not prompt_ids:
             if prompt_type == "encoder" and model_config.is_multimodal_model:
                 pass  # Mllama may have empty encoder inputs for text-only data
+            elif prompt_inputs["type"] == "embeds":
+                pass
             else:
                 raise ValueError(f"The {prompt_type} prompt cannot be empty")
 

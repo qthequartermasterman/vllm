@@ -4,6 +4,8 @@
 import enum
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+import torch
+
 from vllm.multimodal.inputs import MultiModalKwargs, PlaceholderRange
 from vllm.sampling_params import SamplingParams
 from vllm.utils import is_list_of
@@ -21,7 +23,8 @@ class Request:
     def __init__(
         self,
         request_id: str,
-        prompt_token_ids: list[int],
+        prompt_token_ids: Optional[list[int]],
+        prompt_embeds: Optional[torch.Tensor],
         multi_modal_inputs: Optional[list[MultiModalKwargs]],
         multi_modal_hashes: Optional[list[str]],
         multi_modal_placeholders: Optional[list[PlaceholderRange]],
@@ -49,9 +52,10 @@ class Request:
         self.max_tokens = sampling_params.max_tokens
 
         self.prompt_token_ids = prompt_token_ids
-        self.num_prompt_tokens = len(self.prompt_token_ids)
+        self.prompt_embeds = prompt_embeds
+        self.num_prompt_tokens = len(self.prompt_token_ids or self.prompt_embeds)
         self._output_token_ids: list[int] = []
-        self._all_token_ids: list[int] = self.prompt_token_ids.copy()
+        self._all_token_ids: list[int] = (self.prompt_token_ids if self.prompt_token_ids is not None else [0]*self.num_prompt_tokens).copy()
         self.spec_token_ids: list[int] = []
         self.num_computed_tokens = 0
         self.cache_salt: Optional[str] = cache_salt
@@ -94,6 +98,7 @@ class Request:
             request_id=request.request_id,
             client_index=request.client_index,
             prompt_token_ids=request.prompt_token_ids,
+            prompt_embeds=request.prompt_embeds,
             multi_modal_inputs=request.mm_inputs,
             multi_modal_hashes=request.mm_hashes,
             multi_modal_placeholders=request.mm_placeholders,
